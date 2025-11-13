@@ -1,0 +1,149 @@
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { parseCSV, BrindeData } from "@/utils/csvParser";
+import { Filters } from "@/components/dashboard/Filters";
+import { StatsCards } from "@/components/dashboard/StatsCards";
+import { BrindesPieChart } from "@/components/dashboard/BrindesPieChart";
+import { QuantityByClientChart } from "@/components/dashboard/QuantityByClientChart";
+import { ServiceChart } from "@/components/dashboard/ServiceChart";
+import { CityChart } from "@/components/dashboard/CityChart";
+import { ResponsavelChart } from "@/components/dashboard/ResponsavelChart";
+import { FileUpload } from "@/components/dashboard/FileUpload";
+import { ClienteDetailView } from "@/components/dashboard/ClienteDetailView";
+import { useToast } from "@/hooks/use-toast";
+import { Loader2 } from "lucide-react";
+import carpediemLogo from "@/assets/carpediem-logo.png";
+
+export default function Index() {
+  const [data, setData] = useState<BrindeData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedCliente, setSelectedCliente] = useState("todos");
+  const [selectedRespComercial, setSelectedRespComercial] = useState("todos");
+  const [selectedRespCS, setSelectedRespCS] = useState("todos");
+  const [selectedBrinde, setSelectedBrinde] = useState("todos");
+  const [selectedEntregue, setSelectedEntregue] = useState("todos");
+  const { toast } = useToast();
+
+  // 🔗 URL fixa da planilha pública
+  const SHEETS_ID = "1pdhY9eiS_Qbpz6aBs8bVfEPHQ1dYiiut0rd7f237Jks";
+  const SHEETS_EXPORT_URL = `https://docs.google.com/spreadsheets/d/${SHEETS_ID}/export?format=csv&gid=0`;
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        const response = await fetch(SHEETS_EXPORT_URL);
+        if (!response.ok) throw new Error("Não foi possível acessar a planilha.");
+
+        const csvText = await response.text();
+        const parsedData = await parseCSV(csvText);
+        setData(parsedData);
+        toast({
+          title: "Dados carregados!",
+          description: `${parsedData.length} registros importados da planilha online.`,
+        });
+      } catch (err) {
+        console.error("Erro ao carregar dados:", err);
+        toast({
+          title: "Erro ao conectar com o Google Sheets",
+          description: "Verifique se a planilha está pública e acessível.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [toast]);
+
+  const filteredData = useMemo(() => {
+    return data.filter((item) => {
+      const matchCliente = selectedCliente === "todos" || item.cliente === selectedCliente;
+      const matchRespComercial = selectedRespComercial === "todos" || item.responsavelComercial === selectedRespComercial;
+      const matchRespCS = selectedRespCS === "todos" || item.responsavelCS === selectedRespCS;
+      const matchBrinde = selectedBrinde === "todos" || item.brindes === selectedBrinde;
+      const matchEntregue =
+        selectedEntregue === "todos" ||
+        (selectedEntregue === "entregue" && item.entregue) ||
+        (selectedEntregue === "pendente" && !item.entregue);
+      return matchCliente && matchRespComercial && matchRespCS && matchBrinde && matchEntregue;
+    });
+  }, [data, selectedCliente, selectedRespComercial, selectedRespCS, selectedBrinde, selectedEntregue]);
+
+  const clientes = useMemo(() => [...new Set(data.map((i) => i.cliente))].filter(Boolean).sort(), [data]);
+  const respComerciais = useMemo(() => [...new Set(data.map((i) => i.responsavelComercial))].filter(Boolean).sort(), [data]);
+  const respCS = useMemo(() => [...new Set(data.map((i) => i.responsavelCS))].filter(Boolean).sort(), [data]);
+  const brindes = useMemo(() => [...new Set(data.map((i) => i.brindes))].filter(Boolean).sort(), [data]);
+
+  const stats = useMemo(() => {
+    const totalBrindes = filteredData.reduce((sum, i) => sum + i.quantidadeA + i.quantidadeB + i.quantidadeC, 0);
+    const totalClientes = new Set(filteredData.map((i) => i.cliente)).size;
+    const clientesComBrindes = filteredData.filter((i) => i.quantidadeA + i.quantidadeB + i.quantidadeC > 0).length;
+    const totalCidades = new Set(filteredData.map((i) => i.cidade).filter(Boolean)).size;
+
+    return { totalBrindes, totalClientes, clientesComBrindes, totalCidades };
+  }, [filteredData]);
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-background p-6 space-y-6">
+      <header className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-4xl font-bold text-primary mb-2">Dashboard de Brindes 2025</h1>
+          <p className="text-muted-foreground">Análise da distribuição de brindes por cliente, serviço e região</p>
+        </div>
+        <img src={carpediemLogo} alt="Carpediem Logo" className="h-20 w-auto" />
+      </header>
+
+      <Filters
+        clientes={clientes}
+        responsaveisComerciais={respComerciais}
+        responsaveisCS={respCS}
+        brindes={brindes}
+        selectedCliente={selectedCliente}
+        selectedRespComercial={selectedRespComercial}
+        selectedRespCS={selectedRespCS}
+        selectedBrinde={selectedBrinde}
+        selectedEntregue={selectedEntregue}
+        onClienteChange={setSelectedCliente}
+        onRespComercialChange={setSelectedRespComercial}
+        onRespCSChange={setSelectedRespCS}
+        onBrindeChange={setSelectedBrinde}
+        onEntregueChange={setSelectedEntregue}
+        onClearFilters={() => {
+          setSelectedCliente("todos");
+          setSelectedRespComercial("todos");
+          setSelectedRespCS("todos");
+          setSelectedBrinde("todos");
+          setSelectedEntregue("todos");
+        }}
+      />
+
+      <StatsCards {...stats} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <BrindesPieChart data={filteredData} />
+        <QuantityByClientChart data={filteredData} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ServiceChart data={filteredData} />
+        <CityChart data={filteredData} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ResponsavelChart data={filteredData} title="Responsáveis Comerciais" />
+        <ResponsavelChart data={filteredData} title="Responsáveis CS" />
+      </div>
+
+      <ClienteDetailView data={filteredData} />
+    </div>
+  );
+}
