@@ -30,7 +30,7 @@ const Index = () => {
     const loadDataFromGoogleSheets = async () => {
       try {
         const spreadsheetId = "1pdhY9eiS_Qbpz6aBs8bVfEPHQ1dYiiut0rd7f237Jks";
-        const exportUrl = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=0`;
+        const exportUrl = "/api/sheets";
         
         const response = await fetch(exportUrl);
         if (!response.ok) {
